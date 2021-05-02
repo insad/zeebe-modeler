@@ -15,11 +15,15 @@ import {
   is
 } from 'bpmn-js/lib/util/ModelUtil';
 
+import {
+  isEventSubProcess
+} from 'bpmn-js/lib/util/DiUtil';
+
 import timerEventDefinitionImpl from './implementation/TimerEventDefinition';
 
 import timerDurationDefinitionImpl from './implementation/TimerDurationDefinition';
 
-export default function(group, element, bpmnFactory) {
+export default function(group, element, bpmnFactory, translate) {
 
   const timerEventDefinition = eventDefinitionHelper.getTimerEventDefinition(element);
 
@@ -30,11 +34,12 @@ export default function(group, element, bpmnFactory) {
   }
 
   if (!timerOptions.length) {
-    return timerDurationDefinitionImpl(group, bpmnFactory, timerEventDefinition);
+    return timerDurationDefinitionImpl(group, bpmnFactory, timerEventDefinition, translate);
   }
 
-  timerEventDefinitionImpl(group, bpmnFactory, timerEventDefinition, timerOptions);
+  timerEventDefinitionImpl(group, bpmnFactory, timerEventDefinition, timerOptions, translate);
 }
+
 
 // helper //////////
 
@@ -43,17 +48,26 @@ const cancelActivity = (element) => {
   return bo.cancelActivity;
 };
 
+const isInterrupting = (element) => {
+  const bo = getBusinessObject(element);
+  return bo.isInterrupting !== false;
+};
+
 const getTimerOptions = (element) => {
   let timerOptions = [];
 
-  if (is(element, 'bpmn:BoundaryEvent')) {
+  const isStartEvent = is(element, 'bpmn:StartEvent');
+  const isBoundaryEvent = is(element, 'bpmn:BoundaryEvent');
 
+  const hasEventSubprocessParent = isEventSubProcess(element.parent);
+
+  if (isBoundaryEvent || hasEventSubprocessParent) {
     timerOptions = [
       ...timerOptions,
       { value: 'timeDuration', name: 'Duration' }
     ];
 
-    if (!cancelActivity(element)) {
+    if (!cancelActivity(element) && !(hasEventSubprocessParent && isInterrupting(element))) {
       timerOptions = [
         ...timerOptions,
         { value: 'timeCycle', name: 'Cycle' }
@@ -61,7 +75,7 @@ const getTimerOptions = (element) => {
     }
   }
 
-  if (is(element, 'bpmn:StartEvent')) {
+  if (isStartEvent && !hasEventSubprocessParent) {
     timerOptions = [
       ...timerOptions,
       { value: 'timeDate', name: 'Date' },
@@ -71,4 +85,3 @@ const getTimerOptions = (element) => {
 
   return timerOptions;
 };
-

@@ -8,10 +8,6 @@
  * except in compliance with the MIT License.
  */
 
-import {
-  is
-} from 'bpmn-js/lib/util/ModelUtil';
-
 import PropertiesActivator from 'bpmn-js-properties-panel/lib/PropertiesActivator';
 
 import idProps from 'bpmn-js-properties-panel/lib/provider/bpmn/parts/IdProps';
@@ -21,10 +17,6 @@ import nameProps from 'bpmn-js-properties-panel/lib/provider/bpmn/parts/NameProp
 import executableProps from 'bpmn-js-properties-panel/lib/provider/bpmn/parts/ExecutableProps';
 
 import inputOutput from './parts/InputOutputProps';
-
-import inputOutputParameter from './parts/InputOutputParameterProps';
-
-import mappingProps from './parts/MappingProps';
 
 import headers from './parts/HeadersProps';
 
@@ -36,50 +28,34 @@ import messageProps from './parts/MessageProps';
 
 import timerProps from './parts/TimerEventProps';
 
-import payloadMappingsProps from './parts/PayloadMappingsProps';
-
 import multiInstanceProps from './parts/MultiInstanceProps';
 
 import errorProps from './parts/ErrorProps';
 
-
-const getInputOutputParameterLabel = param => {
-
-  if (is(param, 'zeebe:InputParameter')) {
-    return 'Input Parameter';
-  }
-
-  if (is(param, 'zeebe:OutputParameter')) {
-    return 'Output Parameter';
-  }
-
-  return '';
-};
-
-const getMappingLabel = param => {
-
-  if (is(param, 'zeebe:Mapping')) {
-    return 'Mapping';
-  }
-
-  return '';
-};
+import callActivityProps from './parts/CallActivityProps';
 
 
 function createGeneralTabGroups(element, bpmnFactory, canvas, translate) {
   const generalGroup = {
     id: 'general',
-    label: 'General',
+    label: translate('General'),
     entries: []
   };
   idProps(generalGroup, element, translate);
   nameProps(generalGroup, element, bpmnFactory, canvas, translate);
   executableProps(generalGroup, element, translate);
-  taskDefinition(generalGroup, element, bpmnFactory, translate);
-  sequenceFlowProps(generalGroup, element, bpmnFactory, translate);
-  messageProps(generalGroup, element, bpmnFactory, translate);
-  timerProps(generalGroup, element, bpmnFactory, translate);
-  errorProps(generalGroup, element, bpmnFactory, translate);
+
+  const detailsGroup = {
+    id: 'details',
+    label: translate('Details'),
+    entries: []
+  };
+  taskDefinition(detailsGroup, element, bpmnFactory, translate);
+  sequenceFlowProps(detailsGroup, element, bpmnFactory, translate);
+  messageProps(detailsGroup, element, bpmnFactory, translate);
+  timerProps(detailsGroup, element, bpmnFactory, translate);
+  errorProps(detailsGroup, element, bpmnFactory, translate);
+  callActivityProps(detailsGroup, element, bpmnFactory, translate);
 
   const multiInstanceGroup = {
     id: 'multiInstance',
@@ -90,18 +66,19 @@ function createGeneralTabGroups(element, bpmnFactory, canvas, translate) {
 
   return [
     generalGroup,
+    detailsGroup,
     multiInstanceGroup
   ];
 }
 
-function createHeadersGroups(element, bpmnFactory) {
+function createHeadersGroups(element, bpmnFactory, translate) {
 
   const headersGroup = {
     id: 'headers-properties',
-    label: 'Headers',
+    label: translate('Headers'),
     entries: []
   };
-  headers(headersGroup, element, bpmnFactory);
+  headers(headersGroup, element, bpmnFactory, translate);
 
   return [
     headersGroup
@@ -109,64 +86,35 @@ function createHeadersGroups(element, bpmnFactory) {
 }
 
 
-function createPayloadMappingsTabGroups(element, bpmnFactory) {
+function createInputOutputTabGroups(element, bpmnFactory, translate) {
 
-  const payloadMappingsGroup = {
-    id: 'payload-mappings',
-    label: 'Payload Mappings',
+  const inputGroup = {
+    id: 'input',
+    label: translate('Input Parameters'),
     entries: []
   };
 
-  const options = payloadMappingsProps(payloadMappingsGroup, element, bpmnFactory);
+  inputOutput(inputGroup, element, bpmnFactory, translate, {
+    type: 'zeebe:Input',
+    prop: 'inputParameters',
+    prefix: 'input'
+  });
 
-  const mappingGroup = {
-    id: 'mapping',
-    entries: [],
-    enabled: function(element, node) {
-      return options.getSelectedMapping(element, node);
-    },
-    label: function(element, node) {
-      const param = options.getSelectedMapping(element, node);
-      return getMappingLabel(param);
-    }
-  };
-
-  mappingProps(mappingGroup, element, bpmnFactory, options);
-
-  return [
-    payloadMappingsGroup,
-    mappingGroup
-  ];
-
-}
-
-function createInputOutputTabGroups(element, bpmnFactory) {
-
-  const inputOutputGroup = {
-    id: 'input-output',
-    label: 'Parameters',
+  const outputGroup = {
+    id: 'output',
+    label: translate('Output Parameters'),
     entries: []
   };
 
-  const options = inputOutput(inputOutputGroup, element, bpmnFactory);
-
-  const inputOutputParameterGroup = {
-    id: 'input-output-parameter',
-    entries: [],
-    enabled: function(element, node) {
-      return options.getSelectedParameter(element, node);
-    },
-    label: function(element, node) {
-      const param = options.getSelectedParameter(element, node);
-      return getInputOutputParameterLabel(param);
-    }
-  };
-
-  inputOutputParameter(inputOutputParameterGroup, element, bpmnFactory, options);
+  inputOutput(outputGroup, element, bpmnFactory, translate, {
+    type: 'zeebe:Output',
+    prop: 'outputParameters',
+    prefix: 'output'
+  });
 
   return [
-    inputOutputGroup,
-    inputOutputParameterGroup
+    inputGroup,
+    outputGroup
   ];
 }
 
@@ -184,36 +132,28 @@ export default class ZeebePropertiesProvider extends PropertiesActivator {
   getTabs(element) {
     const generalTab = {
       id: 'general',
-      label: 'General',
+      label: this._translate('General'),
       groups: createGeneralTabGroups(
         element, this._bpmnFactory, this._canvas, this._translate)
     };
 
     const inputOutputTab = {
       id: 'input-output',
-      label: 'Input/Output',
+      label: this._translate('Input/Output'),
       groups: createInputOutputTabGroups(
-        element, this._bpmnFactory)
-    };
-
-    const payloadMappingsTab = {
-      id: 'payload-mappings',
-      label: 'Payload Mappings',
-      groups: createPayloadMappingsTabGroups(
-        element, this._bpmnFactory)
+        element, this._bpmnFactory, this._translate)
     };
 
     const headersTab = {
       id: 'headers',
-      label: 'Headers',
+      label: this._translate('Headers'),
       groups: createHeadersGroups(
-        element, this._bpmnFactory)
+        element, this._bpmnFactory, this._translate)
     };
 
     return [
       generalTab,
       inputOutputTab,
-      payloadMappingsTab,
       headersTab
     ];
   }

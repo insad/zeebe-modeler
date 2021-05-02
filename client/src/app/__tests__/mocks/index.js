@@ -132,26 +132,6 @@ export class TabsProvider {
           svg: EXPORT_SVG
         },
         extensions: [ 'bpmn', 'xml' ]
-      },
-      cmmn: {
-        name: 'CMMN',
-        encoding: ENCODING_UTF8,
-        exports: {
-          png: EXPORT_PNG,
-          jpeg: EXPORT_JPEG,
-          svg: EXPORT_SVG
-        },
-        extensions: [ 'cmmn', 'xml' ]
-      },
-      dmn: {
-        name: 'DMN',
-        encoding: ENCODING_UTF8,
-        exports: {
-          png: EXPORT_PNG,
-          jpeg: EXPORT_JPEG,
-          svg: EXPORT_SVG
-        },
-        extensions: [ 'dmn', 'xml' ]
       }
     };
   }
@@ -338,6 +318,10 @@ export class FileSystem extends Mock {
   }
 }
 
+export class ZeebeAPI extends Mock {
+
+}
+
 export class Backend extends Mock {
 
   constructor(overrides) {
@@ -408,6 +392,16 @@ export class KeyboardBindings extends Mock {
 
 export class Config extends Mock {
   get() {}
+
+  set() {}
+
+  getForFile() {}
+
+  setForFile() {}
+
+  getForPlugin() {}
+
+  setForPlugin() {}
 }
 
 export class Log extends Mock {
@@ -464,7 +458,7 @@ export class Plugins extends Mock {
     return [];
   }
 
-  getAll() {
+  getAppPlugins() {
     return [];
   }
 }

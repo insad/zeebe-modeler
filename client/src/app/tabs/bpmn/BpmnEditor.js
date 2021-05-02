@@ -141,14 +141,6 @@ export class BpmnEditor extends CachedComponent {
     }
   }
 
-  ifMounted = (fn) => {
-    return (...args) => {
-      if (this._isMounted) {
-        fn(...args);
-      }
-    };
-  }
-
   listen(fn) {
     const modeler = this.getModeler();
 
@@ -186,12 +178,10 @@ export class BpmnEditor extends CachedComponent {
     modeler.get('commandStack').redo();
   }
 
-  align = (type) => {
-    const modeler = this.getModeler();
-
-    const selection = modeler.get('selection').get();
-
-    modeler.get('alignElements').trigger(selection, type);
+  handleAlignElements = (type) => {
+    this.triggerAction('alignElements', {
+      type
+    });
   }
 
   handleMinimapToggle = (event) => {
@@ -368,8 +358,21 @@ export class BpmnEditor extends CachedComponent {
 
     const modeler = this.getModeler();
 
-    // TODO(nikku): apply default element templates to initial diagram
-    modeler.importXML(xml, this.ifMounted(this.handleImport));
+
+    let error = null, warnings = null;
+    try {
+
+      const result = await modeler.importXML(xml);
+      warnings = result.warnings;
+    } catch (err) {
+
+      error = err;
+      warnings = err.warnings;
+    }
+
+    if (this._isMounted) {
+      this.handleImport(error, warnings);
+    }
   }
 
   /**
@@ -383,7 +386,7 @@ export class BpmnEditor extends CachedComponent {
     return modeler;
   }
 
-  getXML() {
+  async getXML() {
     const {
       lastXML,
       modeler
@@ -393,29 +396,23 @@ export class BpmnEditor extends CachedComponent {
 
     const stackIdx = commandStack._stackIdx;
 
-    return new Promise((resolve, reject) => {
+    if (!this.isDirty()) {
+      return lastXML || this.props.xml;
+    }
 
-      if (!this.isDirty()) {
-        return resolve(lastXML || this.props.xml);
-      }
+    try {
 
-      modeler.saveXML({ format: true }, (err, xml) => {
-        this.setCached({
-          lastXML: xml,
-          stackIdx
-        });
+      const { xml } = await modeler.saveXML({ format: true });
 
-        if (err) {
-          this.handleError({
-            error: err
-          });
+      this.setCached({ lastXML: xml, stackIdx });
 
-          return reject(err);
-        }
+      return xml;
+    } catch (error) {
 
-        return resolve(xml);
-      });
-    });
+      this.handleError({ error });
+
+      return Promise.reject(error);
+    }
   }
 
   async exportAs(type) {
@@ -428,18 +425,18 @@ export class BpmnEditor extends CachedComponent {
     return generateImage(type, svg);
   }
 
-  exportSVG() {
+  async exportSVG() {
     const modeler = this.getModeler();
 
-    return new Promise((resolve, reject) => {
-      modeler.saveSVG((err, svg) => {
-        if (err) {
-          return reject(err);
-        }
+    try {
 
-        return resolve(svg);
-      });
-    });
+      const { svg } = await modeler.saveSVG();
+
+      return svg;
+    } catch (err) {
+
+      return Promise.reject(err);
+    }
   }
 
   triggerAction = (action, context) => {
@@ -559,16 +556,18 @@ export class BpmnEditor extends CachedComponent {
       onLayoutChanged
     } = this.props;
 
+    const imported = this.getModeler().getDefinitions();
+
     const {
-      importing,
+      importing
     } = this.state;
 
     return (
       <div className={ css.BpmnEditor }>
 
-        <Loader hidden={ !importing } />
+        <Loader hidden={ imported && !importing } />
 
-        <Fill name="toolbar" group="color">
+        <Fill slot="toolbar" group="5_color">
           <DropdownButton
             title="Set element color"
             disabled={ !this.state.setColor }
@@ -591,51 +590,51 @@ export class BpmnEditor extends CachedComponent {
           </DropdownButton>
         </Fill>
 
-        <Fill name="toolbar" group="align">
+        <Fill slot="toolbar" group="6_align">
           <Button
             title="Align elements left"
             disabled={ !this.state.align }
-            onClick={ () => this.align('left') }
+            onClick={ () => this.handleAlignElements('left') }
           >
             <Icon name="align-left-tool" />
           </Button>
           <Button
             title="Align elements center"
             disabled={ !this.state.align }
-            onClick={ () => this.align('center') }
+            onClick={ () => this.handleAlignElements('center') }
           >
             <Icon name="align-center-tool" />
           </Button>
           <Button
             title="Align elements right"
             disabled={ !this.state.align }
-            onClick={ () => this.align('right') }
+            onClick={ () => this.handleAlignElements('right') }
           >
             <Icon name="align-right-tool" />
           </Button>
           <Button
             title="Align elements top"
             disabled={ !this.state.align }
-            onClick={ () => this.align('top') }>
+            onClick={ () => this.handleAlignElements('top') }>
             <Icon name="align-top-tool" />
           </Button>
           <Button
             title="Align elements middle"
             disabled={ !this.state.align }
-            onClick={ () => this.align('middle') }
+            onClick={ () => this.handleAlignElements('middle') }
           >
             <Icon name="align-middle-tool" />
           </Button>
           <Button
             title="Align elements bottom"
             disabled={ !this.state.align }
-            onClick={ () => this.align('bottom') }
+            onClick={ () => this.handleAlignElements('bottom') }
           >
             <Icon name="align-bottom-tool" />
           </Button>
         </Fill>
 
-        <Fill name="toolbar" group="distribute">
+        <Fill slot="toolbar" group="7_distribute">
           <Button
             title="Distribute elements horizontally"
             disabled={ !this.state.distribute }
@@ -676,8 +675,19 @@ export class BpmnEditor extends CachedComponent {
 
     const {
       getPlugins,
+      onAction,
       onError
     } = props;
+
+    // notify interested parties that modeler will be configured
+    const handleMiddlewareExtensions = (middlewares) => {
+      onAction('emit-event', {
+        type: 'bpmn.modeler.configure',
+        payload: {
+          middlewares
+        }
+      });
+    };
 
     const {
       options,
@@ -686,8 +696,8 @@ export class BpmnEditor extends CachedComponent {
       exporter: {
         name,
         version
-      }
-    });
+      },
+    }, handleMiddlewareExtensions);
 
     if (warnings.length && isFunction(onError)) {
       onError(
@@ -705,6 +715,14 @@ export class BpmnEditor extends CachedComponent {
     const commandStack = modeler.get('commandStack');
 
     const stackIdx = commandStack._stackIdx;
+
+    // notify interested parties that modeler was created
+    onAction('emit-event', {
+      type: 'bpmn.modeler.created',
+      payload: {
+        modeler
+      }
+    });
 
     return {
       __destroy: () => {

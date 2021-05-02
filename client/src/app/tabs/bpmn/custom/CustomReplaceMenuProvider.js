@@ -11,6 +11,12 @@
 import ReplaceMenuProvider from 'bpmn-js/lib/features/popup-menu/ReplaceMenuProvider';
 
 import {
+  bind,
+  find,
+  filter
+} from 'min-dash';
+
+import {
   isEventSubProcess
 } from 'bpmn-js/lib/util/DiUtil';
 
@@ -19,7 +25,7 @@ import {
 } from 'bpmn-js/lib/features/modeling/util/ModelingUtil';
 
 import {
-  AVAILABLE_REPLACE_ELEMENTS as availableElements,
+  AVAILABLE_REPLACE_ELEMENTS as availableReplaceElements,
   AVAILABLE_LOOP_ENTRIES as availableLoopEntries
 } from './modeler-options/Options';
 
@@ -27,12 +33,8 @@ export default class CustomReplaceMenuProvider extends ReplaceMenuProvider {
 
   constructor(popupMenu, modeling, moddle, bpmnReplace, rules, translate) {
     super(popupMenu, modeling, moddle, bpmnReplace, rules, translate);
-  }
 
-  // For future element support!!
-  _createEntries(element, replaceOptions) {
-    let options = ReplaceMenuProvider.prototype._createEntries.call(this, element, replaceOptions);
-    return options.filter(option => availableElements.indexOf(option.id) != -1);
+    this.defaultEntries = bind(super.getEntries, this);
   }
 
   getHeaderEntries(element) {
@@ -40,18 +42,35 @@ export default class CustomReplaceMenuProvider extends ReplaceMenuProvider {
     let headerEntries = [];
 
     if (
-      isAny(element, [ 'bpmn:ReceiveTask', 'bpmn:ServiceTask', 'bpmn:SubProcess' ]) &&
-      !isEventSubProcess(element)
+      isAny(element, [
+        'bpmn:Task',
+        'bpmn:ReceiveTask',
+        'bpmn:ServiceTask',
+        'bpmn:SubProcess',
+        'bpmn:CallActivity'
+      ]) && !isEventSubProcess(element)
     ) {
 
       const loopEntries = this._getLoopEntries(element);
 
-      headerEntries = loopEntries.filter(
-        entry => availableLoopEntries.indexOf(entry.id) != -1
+      headerEntries = filter(
+        loopEntries,
+        entry => availableLoopEntries.indexOf(entry.id) !== -1
       );
     }
 
     return headerEntries;
+  }
+
+  getEntries(element) {
+    const entries = this.defaultEntries(element);
+
+    const filteredEntries = filter(
+      entries,
+      entry => find(availableReplaceElements, a => a === entry.id)
+    );
+
+    return filteredEntries;
   }
 }
 

@@ -2,10 +2,7 @@
 
 Thanks for creating this pull request!
 
-Please make sure you provide the relevant context.
+Please make sure to link the issue you are closing as "Closes #issueNr". 
+This helps us to understand the context of this PR.
 
 -->
-
-__Which issue does this PR address?__
-
-Closes #

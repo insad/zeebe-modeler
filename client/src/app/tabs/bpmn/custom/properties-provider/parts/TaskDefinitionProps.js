@@ -17,10 +17,6 @@ import {
   is
 } from 'bpmn-js/lib/util/ModelUtil';
 
-import {
-  containsSpace
-} from 'bpmn-js-properties-panel/lib/Utils';
-
 import entryFactory from 'bpmn-js-properties-panel/lib/factory/EntryFactory';
 
 import extensionElementsHelper from 'bpmn-js-properties-panel/lib/helper/ExtensionElementsHelper';
@@ -41,7 +37,7 @@ export default function(group, element, bpmnFactory, translate) {
     return (getElements(bo, 'zeebe:TaskDefinition') || [])[0];
   }
 
-  group.entries.push(entryFactory.validationAwareTextField({
+  group.entries.push(entryFactory.validationAwareTextField(translate, {
     id: 'taskDefinitionType',
     label: translate('Type'),
     modelProperty: 'type',
@@ -80,7 +76,7 @@ export default function(group, element, bpmnFactory, translate) {
       return commands;
     },
 
-    validate: function(element, values, node) {
+    validate: function(element, values) {
       const bo = getTaskDefinition(element);
       let validation = {};
       if (bo) {
@@ -88,24 +84,18 @@ export default function(group, element, bpmnFactory, translate) {
           type
         } = values;
 
-        if (type) {
-          if (containsSpace(type)) {
-            validation = {
-              type: 'Type must not contain spaces'
-            };
-          }
-        }
-        else {
+        if (!type) {
           validation = {
-            type: 'ServiceTask must have a type'
+            type: translate('ServiceTask must have a type')
           };
         }
+
       }
       return validation;
     }
   }));
 
-  group.entries.push(entryFactory.textField({
+  group.entries.push(entryFactory.textField(translate, {
     id: 'taskDefinitionRetries',
     label: translate('Retries'),
     modelProperty: 'retries',
@@ -149,11 +139,3 @@ export default function(group, element, bpmnFactory, translate) {
   }));
 
 }
-
-
-
-
-
-
-
-

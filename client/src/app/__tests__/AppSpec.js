@@ -22,14 +22,18 @@ import {
 
 import Log from '../Log';
 
+import Flags, { DISABLE_REMOTE_INTERACTION } from '../../util/Flags';
+
 import {
   Backend,
   Cache,
   Config,
   Dialog,
   FileSystem,
+  Plugins,
   TabsProvider,
-  Workspace
+  Workspace,
+  ZeebeAPI
 } from './mocks';
 
 import pDefer from 'p-defer';
@@ -361,7 +365,7 @@ describe('<App>', function() {
 
       const showSpy = spy(dialog, 'showOpenFileErrorDialog');
 
-      dialog.setShowOpenFileErrorDialogResponse('cancel');
+      dialog.setShowOpenFileErrorDialogResponse({ button: 'cancel' });
 
       const { app } = createApp({
         globals: {
@@ -416,7 +420,7 @@ describe('<App>', function() {
       // given
       const dialog = new Dialog();
 
-      dialog.setShowEmptyFileDialogResponse('create');
+      dialog.setShowEmptyFileDialogResponse({ button: 'create' });
 
       const { app } = createApp({
         globals: {
@@ -493,7 +497,7 @@ describe('<App>', function() {
       // given
       const dialog = new Dialog();
 
-      dialog.setShowEmptyFileDialogResponse('create');
+      dialog.setShowEmptyFileDialogResponse({ button: 'create' });
 
       const { app } = createApp({
         globals: {
@@ -526,7 +530,7 @@ describe('<App>', function() {
       // given
       const dialog = new Dialog();
 
-      dialog.setShowEmptyFileDialogResponse('create');
+      dialog.setShowEmptyFileDialogResponse({ button: 'create' });
 
       const showSpy = spy(dialog, 'showEmptyFileDialog');
 
@@ -554,7 +558,7 @@ describe('<App>', function() {
       // given
       const dialog = new Dialog();
 
-      dialog.setShowOpenFileErrorDialogResponse('cancel');
+      dialog.setShowOpenFileErrorDialogResponse({ button: 'cancel' });
 
       const { app } = createApp({
         globals: {
@@ -664,7 +668,7 @@ describe('<App>', function() {
         ...app.setDirty(tab)
       });
 
-      dialog.setShowCloseFileDialogResponse('discard');
+      dialog.setShowCloseFileDialogResponse({ button: 'discard' });
 
       // when
       await app.closeTab(tab);
@@ -703,7 +707,7 @@ describe('<App>', function() {
         ...app.setDirty(tab)
       });
 
-      dialog.setShowCloseFileDialogResponse('cancel');
+      dialog.setShowCloseFileDialogResponse({ button: 'cancel' });
 
       // when
       const closeTabResponse = await app.closeTab(tab);
@@ -797,14 +801,18 @@ describe('<App>', function() {
     });
 
 
-    it('should save existing tab', async function() {
+    it('should save existing dirty tab', async function() {
 
       // given
       const file = createFile('diagram_1.bpmn');
 
-      await app.openFiles([ file ]);
+      const [ tab ] = await app.openFiles([ file ]);
 
       // when
+      app.setState({
+        ...app.setDirty(tab)
+      });
+
       await app.triggerAction('save');
 
       // then
@@ -814,6 +822,36 @@ describe('<App>', function() {
         file.path,
         {
           ...file,
+          contents: 'CONTENTS'
+        },
+        {
+          encoding: 'utf8',
+          fileType: 'bpmn'
+        }
+      );
+    });
+
+
+    it('should save any tab', async function() {
+
+      // given
+      const file1 = createFile('diagram_1.bpmn');
+      const file2 = createFile('diagram_2.bpmn');
+
+      const [ tab1 ] = await app.openFiles([ file1, file2 ]);
+
+      // when
+      app.setState({
+        ...app.setDirty(tab1) // inactive tab
+      });
+
+      await app.triggerAction('save-tab', { tab: tab1 });
+
+      // then
+      expect(writeFileSpy).to.have.been.calledWith(
+        file1.path,
+        {
+          ...file1,
           contents: 'CONTENTS'
         },
         {
@@ -856,13 +894,42 @@ describe('<App>', function() {
     it('should save all tabs');
 
 
+    it('should emit <tab.saved> after save', async function() {
+
+      // given
+      const file = createFile('diagram_1.bpmn');
+
+      const [ tab ] = await app.openFiles([ file ]);
+
+      // when
+      app.setState({
+        ...app.setDirty(tab)
+      });
+
+      const saveSpy = spy(function(event) {
+        const {
+          tab
+        } = event;
+
+        expect(tab).to.exist;
+      });
+
+      app.on('tab.saved', saveSpy);
+
+      await app.triggerAction('save');
+
+      // then
+      expect(saveSpy).to.have.been.calledOnce;
+    });
+
+
     it('should handle save error <cancel>', async function() {
 
       // given
       await app.createDiagram();
 
       dialog.setShowSaveFileDialogResponse('foo.svg');
-      dialog.setShowSaveFileErrorDialogResponse('cancel');
+      dialog.setShowSaveFileErrorDialogResponse({ button: 'cancel' });
 
       const err = new Error('foo');
 
@@ -882,7 +949,7 @@ describe('<App>', function() {
       await app.createDiagram();
 
       dialog.setShowSaveFileDialogResponse('foo.svg');
-      dialog.setShowSaveFileErrorDialogResponse('retry');
+      dialog.setShowSaveFileErrorDialogResponse({ button: 'retry' });
 
       const err = new Error('foo');
 
@@ -901,6 +968,19 @@ describe('<App>', function() {
 
       expect(saveTabSpy).to.have.been.calledTwice;
       expect(writeFileSpy).to.have.been.calledTwice;
+    });
+
+
+    it('should trigger <saveTab.start> action before saving tab', async function() {
+
+      // given
+      var staveTabStartSpy = spy(app, 'triggerAction');
+
+      // when
+      await app.triggerAction('save');
+
+      // then
+      expect(staveTabStartSpy).to.have.been.calledWith('saveTab.start');
     });
 
   });
@@ -997,7 +1077,7 @@ describe('<App>', function() {
       await app.createDiagram();
 
       dialog.setShowSaveFileDialogResponse('foo.svg');
-      dialog.setShowSaveFileErrorDialogResponse('cancel');
+      dialog.setShowSaveFileErrorDialogResponse({ button: 'cancel' });
 
       const err = new Error('foo');
 
@@ -1017,7 +1097,7 @@ describe('<App>', function() {
       await app.createDiagram();
 
       dialog.setShowSaveFileDialogResponse('foo.svg');
-      dialog.setShowSaveFileErrorDialogResponse('retry');
+      dialog.setShowSaveFileErrorDialogResponse({ button: 'retry' });
 
       const err = new Error('foo');
 
@@ -1036,6 +1116,23 @@ describe('<App>', function() {
 
       expect(exportAsSpy).to.have.been.calledTwice;
       expect(writeFileSpy).to.have.been.calledTwice;
+    });
+
+
+    it('should handle missing export extension', async function() {
+
+      // given
+      await app.createDiagram();
+
+      dialog.setShowSaveFileDialogResponse('foo');
+
+      // when
+      await app.triggerAction('export-as');
+
+      // then
+      expect(showSaveFileDialogSpy).to.have.been.called;
+
+      expect(writeFileSpy).not.to.have.been.called;
     });
 
   });
@@ -1479,6 +1576,23 @@ describe('<App>', function() {
         expect(changedSpy).to.have.been.calledTwice;
       });
 
+
+      it('on quit', function() {
+
+        // given
+        const changedSpy = spy(() => {});
+
+        const { app } = createApp({
+          onWorkspaceChanged: changedSpy
+        });
+
+        // when
+        app.quit();
+
+        // then
+        expect(changedSpy).to.have.been.calledOnce;
+      });
+
     });
 
   });
@@ -1579,6 +1693,157 @@ describe('<App>', function() {
   });
 
 
+  describe('notifications', function() {
+
+    it('should display notification', async function() {
+
+      // given
+      const {
+        app,
+        tree
+      } = createApp();
+
+      const notificationProps = { title: 'test' };
+
+      // when
+      await app.triggerAction('display-notification', notificationProps);
+
+      // then
+      expect(tree.find('Notifications').first().prop('notifications')).to.have.lengthOf(1);
+    });
+
+
+    it('should close notification', async function() {
+
+      // given
+      const {
+        app,
+        tree
+      } = createApp();
+
+      const notificationProps = { title: 'test' };
+
+      const { close } = await app.triggerAction('display-notification', notificationProps);
+
+      // when
+      close();
+
+      // then
+      expect(tree.find('Notifications').first().prop('notifications')).to.have.lengthOf(0);
+    });
+
+
+    it('should update notification', async function() {
+
+      // given
+      const {
+        app,
+        tree
+      } = createApp();
+
+      const newTitle = 'new Title';
+
+      const notificationProps = { title: 'test' };
+
+      const { update } = await app.triggerAction('display-notification', notificationProps);
+
+      // when
+      update({ title: newTitle });
+
+      // then
+      const notifications = tree.find('Notifications').first().prop('notifications');
+
+      expect(notifications).to.have.lengthOf(1);
+      expect(notifications[0]).to.have.property('title', newTitle);
+    });
+
+
+    it('should NOT display notification without title', async function() {
+
+      // given
+      const {
+        app,
+        tree
+      } = createApp();
+
+      const notificationProps = {};
+
+      // when
+      await app.triggerAction('display-notification', notificationProps);
+
+      // then
+      expect(tree.find('Notifications').first().prop('notifications')).to.have.lengthOf(0);
+    });
+
+
+    it('should NOT display notification of unknown type', async function() {
+
+      // given
+      const {
+        app,
+        tree
+      } = createApp();
+
+      const notificationProps = { type: 'unknown' };
+
+      // when
+      await app.triggerAction('display-notification', notificationProps);
+
+      // then
+      expect(tree.find('Notifications').first().prop('notifications')).to.have.lengthOf(0);
+    });
+
+
+    it('should close all notifications when tab changes', async function() {
+
+      // given
+      const {
+        app,
+        tree
+      } = createApp();
+
+      const file = createFile('1.bpmn');
+
+      const notificationProps = { type: 'unknown' };
+
+      // open several notifications
+      await app.triggerAction('display-notification', notificationProps);
+      await app.triggerAction('display-notification', notificationProps);
+      await app.triggerAction('display-notification', notificationProps);
+
+      // when
+      app.openFiles([ file ]);
+
+      // then
+      expect(tree.find('Notifications').first().prop('notifications')).to.have.lengthOf(0);
+    });
+
+
+    it('should close all notifications when sheet changes', async function() {
+
+      // given
+      const {
+        app,
+        tree
+      } = createApp();
+
+      const notificationProps = { type: 'unknown' };
+
+      // open several notifications
+      await app.triggerAction('display-notification', notificationProps);
+      await app.triggerAction('display-notification', notificationProps);
+      await app.triggerAction('display-notification', notificationProps);
+
+      // when
+      await app.triggerAction('emit-event', { type: 'tab.activeSheetChanged' });
+
+      // then
+      expect(tree.find('Notifications').first().prop('notifications')).to.have.lengthOf(0);
+    });
+
+  });
+
+
   describe('customization', function() {
 
     class CustomEmptyTab extends Component {
@@ -1644,7 +1909,9 @@ describe('<App>', function() {
 
       // given
       const showSpy = spy(_ => {
-        return 'ok';
+        return {
+          button: 'ok'
+        };
       });
 
       const dialog = new Dialog({
@@ -2111,111 +2378,14 @@ describe('<App>', function() {
   });
 
 
-  describe('deployment handling', function() {
+  describe('#getConfig', function() {
 
     afterEach(sinon.restore);
 
 
-    it('should handle deployment', async function() {
+    it('should get config', async function() {
 
       // given
-      const sendSpy = spy();
-
-      const backend = new Backend({
-        send: sendSpy
-      });
-
-      const { app } = createApp({
-        globals: {
-          backend
-        }
-      });
-
-      const file = createFile('1.bpmn');
-      await app.openFiles([ file ]);
-
-      const saveStub = sinon.stub(app, 'saveTab').resolves();
-
-      // when
-      await app.handleDeploy({});
-
-      // then
-      expect(saveStub).to.be.calledOnce;
-      expect(sendSpy).to.be.calledOnceWith('deploy', { file });
-    });
-
-
-    it('should save tab before deployment', async function() {
-
-      // given
-      const fakeFile = createFile('saved.bpmn');
-      const sendSpy = spy();
-
-      const backend = new Backend({
-        send: sendSpy
-      });
-
-      const { app } = createApp({
-        globals: {
-          backend
-        }
-      });
-
-      const saveStub = sinon.stub(app, 'saveTab').callsFake(() => {
-        app.tabSaved(app.state.activeTab, fakeFile);
-
-        return Promise.resolve();
-      });
-
-      // when
-      await app.createDiagram();
-      await app.handleDeploy({});
-
-      // then
-      expect(saveStub).to.be.calledOnce;
-      expect(sendSpy).to.be.calledOnce;
-    });
-
-
-    it('should throw error when tab is not saved before deployment', async function() {
-
-      // given
-      const sendSpy = spy();
-
-      const backend = new Backend({
-        send: sendSpy
-      });
-
-      const { app } = createApp({
-        globals: {
-          backend
-        }
-      });
-
-      const saveStub = sinon.stub(app, 'saveTab').resolves();
-
-
-      // when
-      await app.createDiagram();
-      await app.handleDeploy({});
-
-      // then
-      expect(saveStub).to.be.calledOnce;
-      expect(sendSpy).to.not.be.called;
-    });
-
-  });
-
-
-  describe('config handling', function() {
-
-    afterEach(sinon.restore);
-
-
-    it('should load requested config', async function() {
-
-      // given
-      const CONFIG_KEY = 'CONFIG_KEY';
       const getConfigSpy = spy();
 
       const config = new Config({
@@ -2229,10 +2399,40 @@ describe('<App>', function() {
       });
 
       // when
-      app.loadConfig(CONFIG_KEY);
+      app.getConfig('foo');
 
       // then
-      expect(getConfigSpy).to.be.calledOnceWith(CONFIG_KEY);
+      expect(getConfigSpy).to.be.calledOnceWith('foo');
+    });
+
+  });
+
+
+  describe('#setConfig', function() {
+
+    afterEach(sinon.restore);
+
+
+    it('should set config', async function() {
+
+      // given
+      const setConfigSpy = spy();
+
+      const config = new Config({
+        set: setConfigSpy
+      });
+
+      const { app } = createApp({
+        globals: {
+          config
+        }
+      });
+
+      // when
+      app.setConfig('foo');
+
+      // then
+      expect(setConfigSpy).to.be.calledOnceWith('foo');
     });
 
   });
@@ -2401,6 +2601,47 @@ describe('<App>', function() {
 
   });
 
+
+  describe('#emitWithTab', function() {
+
+    let app;
+
+    beforeEach(async function() {
+
+      ({ app } = createApp(mount));
+    });
+
+    it('should emit event with tab', function() {
+
+      // given
+      const {
+        activeTab
+      } = app.state;
+
+      const payload = { foo: 'bar' };
+
+      const eventSpy = sinon.spy((event) => {
+
+        const {
+          foo,
+          tab
+        } = event;
+
+        expect(foo).to.equal('bar');
+        expect(tab).to.eql(activeTab);
+      });
+
+      app.on('foo', eventSpy);
+
+      // when
+      app.emitWithTab('foo', activeTab, payload);
+
+      // then
+      expect(eventSpy).to.have.been.called;
+    });
+
+  });
+
 });
 
 
@@ -2418,13 +2659,22 @@ function createApp(options = {}, mountFn=shallow) {
 
   let app;
 
+  const flags = options.flags || {
+    [ DISABLE_REMOTE_INTERACTION ]: true
+  };
+
+  Flags.init(flags);
+
   const cache = options.cache || new Cache();
 
   const defaultGlobals = {
     backend: new Backend(),
+    config: new Config(),
     dialog: new Dialog(),
     fileSystem: new FileSystem(),
-    workspace: new Workspace()
+    plugins: new Plugins(),
+    workspace: new Workspace(),
+    zeebeAPI: new ZeebeAPI()
   };
 
   const globals = {

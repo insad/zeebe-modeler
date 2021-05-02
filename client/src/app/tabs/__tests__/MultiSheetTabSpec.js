@@ -119,25 +119,19 @@ describe('<MultiSheetTab>', function() {
     });
 
 
-    it('should open warnings toast', function() {
+    it('should show notification when imported with warnings', function() {
 
       // given
+      const actionSpy = spy();
       const {
         instance
-      } = renderTab();
+      } = renderTab({ onAction: actionSpy });
 
       // when
       instance.handleImport(null, warnings);
 
-      const {
-        warnings: stateWarnings,
-        currentToast
-      } = instance.getCached();
-
       // then
-      expect(stateWarnings).to.eql(warnings);
-      expect(currentToast).to.eql('WARNINGS');
-
+      expect(actionSpy).to.have.been.calledOnceWith('display-notification');
     });
 
 
@@ -163,6 +157,36 @@ describe('<MultiSheetTab>', function() {
       expect(errorSpy).to.have.been.calledWith(error);
       expect(warningSpy).not.to.have.been.called;
       expect(showImportErrorDialogSpy).to.have.been.called;
+    });
+
+
+    it('should import with error and warnings', function() {
+
+      // given
+      const errorSpy = spy(),
+            warningSpy = spy();
+
+      const {
+        instance
+      } = renderTab({
+        onError: errorSpy,
+        onWarning: warningSpy
+      });
+
+      const showImportErrorDialogSpy = spy(instance, 'showImportErrorDialog');
+      const displayWarningsNotificationSpy = spy(instance, 'displayImportWarningsNotification');
+
+      // when
+      instance.handleImport(error, warnings);
+
+      // then
+      expect(errorSpy).to.have.been.calledWith(error);
+
+      expect(warningSpy).to.have.been.calledTwice;
+      expect(warningSpy.alwaysCalledWith('warning')).to.be.true;
+
+      expect(showImportErrorDialogSpy).to.have.been.called;
+      expect(displayWarningsNotificationSpy).not.to.have.been.called;
     });
 
   });
@@ -194,7 +218,9 @@ describe('<MultiSheetTab>', function() {
       // given
       const actionSpy = spy(action => {
         if (action === 'show-dialog') {
-          return 'ask-in-forum';
+          return {
+            button: 'ask-in-forum'
+          };
         }
       });
 
@@ -302,6 +328,38 @@ describe('<MultiSheetTab>', function() {
   });
 
 
+  describe('#switchSheet', function() {
+
+    it('should emit tab.activeSheetChanged when sheet is changed', async function() {
+
+      // given
+      const emitEventSpy = sinon.spy();
+      const { instance } = renderTab({
+        onAction: (...args) => args[0] === 'emit-event' && emitEventSpy(...args),
+        providers: [{
+          type: 'foo',
+          editor: DefaultEditor,
+          defaultName: 'Foo'
+        }, {
+          type: 'bar',
+          editor: DefaultEditor,
+          defaultName: 'Bar'
+        }]
+      });
+      const { sheets } = instance.getCached();
+
+      // when
+      await instance.switchSheet(sheets[1]);
+
+      // then
+      expect(emitEventSpy).to.have.been.calledOnce;
+      expect(emitEventSpy.args).to.eql([
+        [ 'emit-event', { type: 'tab.activeSheetChanged', payload: { activeSheet: sheets[1] } } ]
+      ]);
+    });
+  });
+
+
   describe('dirty state', function() {
 
     let instance,
@@ -398,53 +456,44 @@ describe('<MultiSheetTab>', function() {
   });
 
 
-  describe('toast handling', function() {
+  describe('#onAction', function() {
 
-    let instance;
-
-    beforeEach(function() {
-      const rendered = renderTab();
-
-      instance = rendered.instance;
-    });
-
-
-    it('should set toast', function() {
+    it('should propagate action', async function() {
 
       // given
-      const fakeToastName = 'toast';
-
-      // when
-      instance.setToast(fakeToastName);
+      const onAction = sinon.spy();
 
       const {
-        currentToast
-      } = instance.getCached();
+        instance
+      } = renderTab({
+        onAction
+      });
+
+      // when
+      await instance.onAction('foo');
 
       // then
-      expect(currentToast).to.eql(fakeToastName);
+      expect(onAction).to.have.been.calledWith('foo');
     });
 
 
-    it('should close toast', function() {
+    it('should handle close-tab action', async function() {
 
       // given
-      const fakeToastName = 'toast';
-
-      instance.setToast(fakeToastName);
-
-      // when
-      instance.closeToast();
+      const onAction = sinon.spy();
 
       const {
-        currentToast
-      } = instance.getCached();
+        instance
+      } = renderTab({
+        onAction
+      });
+
+      // when
+      await instance.onAction('close-tab');
 
       // then
-      expect(currentToast).to.eql(null);
+      expect(onAction).to.have.been.calledWith('close-tab', { tabId: instance.props.tab.id });
     });
-
-
   });
 
 });

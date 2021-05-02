@@ -8,8 +8,6 @@
  * except in compliance with the MIT License.
  */
 
-import Ids from 'ids';
-
 import bpmnDiagram from './tabs/bpmn/diagram.bpmn';
 
 import replaceIds from '@bpmn-io/replace-ids';
@@ -20,7 +18,9 @@ import { forEach } from 'min-dash';
 
 import parseDiagramType from './util/parseDiagramType';
 
-const ids = new Ids([ 32, 36, 1 ]);
+import {
+  generateId
+} from '../util';
 
 const createdByType = {};
 
@@ -85,7 +85,7 @@ export default class TabsProvider {
         getHelpMenu() {
           return [{
             label: 'Zeebe Modeling Tutorial',
-            action: 'https://docs.zeebe.io/bpmn-modeler/introduction.html'
+            action: 'https://docs.zeebe.io/bpmn-workflows/bpmn-primer.html'
           },
           {
             label: 'BPMN Modeling Reference',
@@ -134,13 +134,13 @@ export default class TabsProvider {
     return this.getProvider(type).getComponent(options);
   }
 
-  getInitialFileContents(type, options) {
-    const rawContents = this.getProvider(type).getInitialContents(options);
+  getInitialFileContents(type) {
+    const rawContents = this.getProvider(type).getInitialContents();
 
-    return rawContents && replaceIds(rawContents, ids);
+    return rawContents && replaceIds(rawContents, generateId);
   }
 
-  createFile(type, options) {
+  createFile(type) {
 
     const counter = (
       type in createdByType
@@ -150,7 +150,7 @@ export default class TabsProvider {
 
     const name = `diagram_${counter}.${type}`;
 
-    const contents = this.getInitialFileContents(type, options);
+    const contents = this.getInitialFileContents(type);
 
     return {
       name,
@@ -190,7 +190,7 @@ export default class TabsProvider {
 
   createTabForFile(file) {
 
-    const id = ids.next();
+    const id = generateId();
 
     const type = this.getTabType(file);
 

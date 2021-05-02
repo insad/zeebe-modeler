@@ -71,24 +71,34 @@ class Dialog {
     // remove extension
     name = path.parse(name).name;
 
+    // add default extension as specified by filter
+    // this prevents users on Linux to run into export / save-as issues,
+    // cf. https://github.com/camunda/camunda-modeler/issues/1699
+    if (filters && filters[0] && filters[0].extensions && filters[0].extensions[0]) {
+      name = name + '.' + filters[0].extensions[0];
+    }
+
     let { defaultPath } = options;
 
     if (!defaultPath) {
       defaultPath = this.config.get('defaultPath', this.userDesktopPath);
     }
 
-    return new Promise(resolve => {
-      this.electronDialog.showSaveDialog(this.browserWindow, {
-        defaultPath: `${ defaultPath }/${ name }`,
-        filters,
-        title: title || `Save "${ name }" as...`
-      }, (filePath) => {
-        if (filePath) {
-          this.setDefaultPath(filePath);
-        }
+    return this.electronDialog.showSaveDialog(this.browserWindow, {
+      defaultPath: `${ defaultPath }/${ name }`,
+      filters,
+      title: title || `Save "${ name }" as...`
+    }).then(response => {
 
-        resolve(filePath);
-      });
+      const {
+        filePath
+      } = response;
+
+      if (filePath) {
+        this.setDefaultPath(filePath);
+      }
+
+      return filePath;
     });
   }
 
@@ -104,19 +114,22 @@ class Dialog {
       defaultPath = this.config.get('defaultPath', this.userDesktopPath);
     }
 
-    return new Promise(resolve => {
-      this.electronDialog.showOpenDialog(this.browserWindow, {
-        defaultPath,
-        filters,
-        properties: [ 'openFile', 'multiSelections' ],
-        title: title || 'Open File'
-      }, (filePaths = []) => {
-        if (filePaths.length) {
-          this.setDefaultPath(filePaths[0]);
-        }
+    return this.electronDialog.showOpenDialog(this.browserWindow, {
+      defaultPath,
+      filters,
+      properties: [ 'openFile', 'multiSelections' ],
+      title: title || 'Open File'
+    }).then(response => {
 
-        resolve(filePaths);
-      });
+      const {
+        filePaths
+      } = response;
+
+      if (filePaths && filePaths[0]) {
+        this.setDefaultPath(filePaths);
+      }
+
+      return filePaths || [];
     });
   }
 
@@ -143,10 +156,13 @@ class Dialog {
       noLink: true
     });
 
-    return new Promise((resolve) => {
-      this.electronDialog.showMessageBox(this.browserWindow, options, (index) => {
-        resolve(buttons[ index ].id);
-      });
+    return this.electronDialog.showMessageBox(
+      this.browserWindow, options
+    ).then(response => {
+      return {
+        ...response,
+        button: buttons[ response.response ].id
+      };
     });
   }
 

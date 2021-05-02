@@ -15,8 +15,6 @@ import {
   TabContainer
 } from '../primitives';
 
-import { ToastConductor } from '../toasts';
-
 import {
   WithCache,
   WithCachedState,
@@ -138,13 +136,13 @@ export class MultiSheetTab extends CachedComponent {
       type
     } = tab;
 
-    const answer = await onAction('show-dialog', getErrorDialog({
+    const { button } = await onAction('show-dialog', getErrorDialog({
       error,
       name,
       type
     }));
 
-    if (answer === 'ask-in-forum') {
+    if (button === 'ask-in-forum') {
       onAction('open-external-url', {
         url: 'https://forum.camunda.org/c/modeler'
       });
@@ -152,43 +150,34 @@ export class MultiSheetTab extends CachedComponent {
   }
 
   handleImport = (error, warnings) => {
+
+    if (warnings && warnings.length) {
+      warnings.forEach(warning => {
+        this.handleWarning(warning);
+      });
+
+      if (!error) {
+        this.displayImportWarningsNotification(warnings);
+      }
+    }
+
     if (error) {
       this.openFallback();
 
       this.showImportErrorDialog(error);
 
-      return this.handleError(error);
-    }
-
-    if (warnings && warnings.length) {
-
-      this.openWarningsToast({
-        warnings
-      });
-
-      warnings.forEach(warning => {
-        this.handleWarning(warning);
-      });
+      this.handleError(error);
     }
   }
 
-  openWarningsToast = options => {
-    const {
-      warnings
-    } = options;
-
-    this.setCached({
-      warnings
+  displayImportWarningsNotification(warnings) {
+    this.props.onAction('display-notification', {
+      type: 'warning',
+      title: `Imported with ${warnings.length} warning${warnings.length !== 1 ? 's' : ''}`,
+      content: 'See further details in the log.',
+      duration: 0
     });
-
-    this.setToast('WARNINGS');
   }
-
-  setToast = currentToast => this.setCached({ currentToast })
-
-  closeToast = () => {
-    this.setToast(null);
-  };
 
   /**
    * Open fallback sheet if provided.
@@ -290,6 +279,11 @@ export class MultiSheetTab extends CachedComponent {
       activeSheet: sheet,
       lastXML: xml
     });
+
+    this.props.onAction('emit-event', {
+      type: 'tab.activeSheetChanged',
+      payload: { activeSheet: sheet }
+    });
   }
 
   getDefaultSheets = () => {
@@ -343,20 +337,30 @@ export class MultiSheetTab extends CachedComponent {
     return file && !file.path;
   }
 
+  onAction = (action, options) => {
+    const {
+      onAction,
+      tab
+    } = this.props;
+
+    if (action === 'close-tab') {
+      return onAction('close-tab', { tabId: tab.id });
+    }
+
+    return onAction(action, options);
+  }
+
   render() {
     let {
       activeSheet,
       sheets,
-      lastXML,
-      warnings,
-      currentToast
+      lastXML
     } = this.getCached();
 
     let {
       id,
       xml,
       layout,
-      onAction,
       tab
     } = this.props;
 
@@ -384,14 +388,15 @@ export class MultiSheetTab extends CachedComponent {
             activeSheet={ activeSheet }
             onSheetsChanged={ this.sheetsChanged }
             onContextMenu={ this.handleContextMenu }
-            onAction={ onAction }
+            onAction={ this.onAction }
             onChanged={ this.handleChanged }
             onContentUpdated={ this.handleContentUpdated }
             onError={ this.handleError }
             onImport={ this.handleImport }
             onLayoutChanged={ this.handleLayoutChanged }
             onModal={ this.props.onModal }
-            onLoadConfig={ this.props.onLoadConfig }
+            getConfig={ this.props.getConfig }
+            setConfig={ this.props.setConfig }
             getPlugins={ this.props.getPlugins }
           />
         </TabContainer>
@@ -401,12 +406,6 @@ export class MultiSheetTab extends CachedComponent {
           tabs={ sheets }
           activeTab={ activeSheet }
           onSelect={ this.switchSheet } />
-
-        <ToastConductor
-          currentToast={ currentToast }
-          warnings={ warnings }
-          onClose={ this.closeToast }
-        />
 
       </div>
     );

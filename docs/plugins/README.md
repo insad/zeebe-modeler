@@ -1,15 +1,10 @@
-> :warning: __The feature Plugins may be subject to change in the future.__ As an example, this may lead to breaking changes regarding the configuration and consuption of plugins.
-
 # Plugins :electric_plug:
 
 Plugins allow you to change the appearance and behavior of the Camunda Modeler and add new features.
 
-![Camunda Modeler Plugins](./screencast.gif)
-<p align="center">Using the Camunda Modeler with a Plugin</p>
-
 ## Plugging into the Camunda Modeler
 
-You can plug into the modeler in order to change its appearance, add new menu entries or extend the modeling tools for [BPMN](https://github.com/bpmn-io/bpmn-js), [CMMN](https://github.com/bpmn-io/cmmn-js) and [DMN](https://github.com/bpmn-io/dmn-js). Adding a plugin is as easy as putting the files into the `resources/plugins` sub-folder of your local [`{APP_HOME}`](../search-paths#application-home-directory) or [`{USER_DATA}`](../search-paths#user-data-directory)  directory.
+You can plug into the modeler in order to change its appearance, add new menu entries or extend the modeling tools for [BPMN](https://github.com/bpmn-io/bpmn-js). Adding a plugin is as easy as putting the files into the `resources/plugins` sub-folder of your local [`{APP_HOME}`](../search-paths#application-home-directory) or [`{USER_DATA}`](../search-paths#user-data-directory)  directory.
 
 So let's dive into how to add your own plugins.
 
@@ -22,12 +17,12 @@ module.exports = {
   name: 'My Awesome Plugin', // the name of your plugin
   style: './style.css', // changing the appearance of the modeler
   menu: './menu.js', // adding menu entries to the modeler
-  script: './script.js' // extend the modeling tools for BPMN, CMMN and DMN
+  script: './script.js' // extend the modeling tools for BPMN
 };
 ```
 The modeler will automatically load your plugins on startup.
 
-### Changing the appearance of the modeler
+### Changing the Appearance of the Modeler
 
 You can change the appearance of the modeler using CSS.
 
@@ -47,7 +42,7 @@ module.exports = {
 };
 ```
 
-### Adding menu entries to the modeler
+### Adding Menu Entries to the Modeler
 
 You can add new menu entries to the modelers menu.
 
@@ -68,7 +63,7 @@ module.exports = function(electronApp, menuState) {
       shell.openExternal('https://camunda.org/bpmn/reference/');
     }
   }];
-});
+};
 ```
 
 Plug them into the modeler like this:
@@ -85,7 +80,7 @@ For more information on how the modeler's menu works, have a look at its impleme
 
 ### Extend the modeling tools for BPMN
 
-> Currently you can only extend bpmn-js
+> Currently you can only extend bpmn-js and dmn-js
 
 You can extend the modeling tools for [BPMN](https://github.com/bpmn-io/bpmn-js).
 

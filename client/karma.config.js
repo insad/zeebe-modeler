@@ -26,6 +26,7 @@ var windows = /^win/.test(platform);
 var { DefinePlugin } = require('webpack');
 
 var absoluteBasePath = path.resolve(__dirname);
+var resourcePath = path.resolve(__dirname + '/resources');
 
 /* global process */
 
@@ -48,7 +49,11 @@ var browsers =
       return browser;
     });
 
-var suite = coverage ? 'test/all.js' : 'test/suite.js';
+var suite = 'test/suite.js';
+
+if (coverage) {
+  suite = 'test/all.js';
+}
 
 
 module.exports = function(karma) {
@@ -82,7 +87,7 @@ module.exports = function(karma) {
 
     coverageReporter: {
       reporters: [
-        { type: 'lcov', subdir: '.' }
+        { type: 'lcov', subdir: 'all' }
       ]
     },
 
@@ -103,8 +108,16 @@ module.exports = function(karma) {
             use: 'babel-loader'
           },
           {
-            test: /\.(css|bpmn|cmmn|dmn|less|xml|png|svg)$/,
-            use: 'raw-loader'
+            oneOf: [
+              {
+                test: /[/\\][A-Z][^/\\]+\.svg$/,
+                use: 'react-svg-loader'
+              },
+              {
+                test: /\.(css|bpmn|less|xml|png|svg)$/,
+                use: 'raw-loader'
+              }
+            ]
           }
         ]
       },
@@ -125,7 +138,8 @@ module.exports = function(karma) {
         ],
         modules: [
           'node_modules',
-          absoluteBasePath
+          absoluteBasePath,
+          resourcePath
         ],
         alias: {
           'bpmn-js/lib/Modeler': 'test/mocks/bpmn-js/Modeler',

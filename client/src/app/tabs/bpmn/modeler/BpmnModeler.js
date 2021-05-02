@@ -17,7 +17,9 @@ import diagramOriginModule from 'diagram-js-origin';
 import alignToOriginModule from '@bpmn-io/align-to-origin';
 import addExporterModule from '@bpmn-io/add-exporter';
 
-import executableFixModule from './features/executable-fix';
+import executableFixModule from 'bpmn-js-executable-fix';
+
+import completeDirectEditingModule from './features/complete-direct-editing';
 import globalClipboardModule from './features/global-clipboard';
 import handToolOnSpaceModule from './features/hand-tool-on-space';
 
@@ -32,9 +34,14 @@ import propertiesProviderModule from '../custom/properties-provider';
 
 import zeebeModelingModule from '../custom/modeling';
 
-import zeebeModdleExtension from '../custom/zeebe-bpmn-moddle/zeebe';
+import zeebeModdle from 'zeebe-bpmn-moddle/resources/zeebe';
+
+import zeebeModdleExtension from 'zeebe-bpmn-moddle/lib';
 
 import zeebeCustoms from '../custom';
+
+import disableCollapsedSubprocessModule from 'bpmn-js-disable-collapsed-subprocess';
+
 
 import 'bpmn-js-properties-panel/styles/properties.less';
 
@@ -56,7 +63,7 @@ export default class ZeebeBpmnModeler extends BpmnModeler {
     super({
       ...otherOptions,
       moddleExtensions: {
-        zeebe: zeebeModdleExtension,
+        zeebe: zeebeModdle,
         ...(moddleExtensions || {})
       }
     });
@@ -67,6 +74,7 @@ const defaultModules = BpmnModeler.prototype._modules;
 
 const extensionModules = [
   addExporterModule,
+  completeDirectEditingModule,
   executableFixModule,
   Flags.get(DISABLE_ADJUST_ORIGIN) ? diagramOriginModule : alignToOriginModule,
   globalClipboardModule,
@@ -78,7 +86,8 @@ const extensionModules = [
   propertiesPanelKeyboardBindingsModule,
   zeebeModdleExtension,
   zeebeModelingModule,
-  zeebeCustoms
+  zeebeCustoms,
+  disableCollapsedSubprocessModule
 ];
 
 ZeebeBpmnModeler.prototype._modules = [

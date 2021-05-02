@@ -22,6 +22,8 @@ const { assign } = require('min-dash');
 const USER_PATH = '/users/bpmn.io/',
       USER_DESKTOP_PATH = path.join(USER_PATH, 'desktop');
 
+const USER_CANCELED = { canceled: true };
+
 
 describe('Dialog', function() {
   let dialog,
@@ -45,7 +47,7 @@ describe('Dialog', function() {
     it('should show error dialog', async function() {
 
       // given
-      electronDialog.setResponse(0);
+      electronDialog.setResponse({ response: 0 });
 
       var options = {
         buttons: [{
@@ -70,14 +72,14 @@ describe('Dialog', function() {
       expect(dialogArgs.title).to.equal('error');
       expect(dialogArgs.buttons).to.have.length(2);
 
-      expect(result).to.equal('foo');
+      expect(result.button).to.equal('foo');
     });
 
 
     it('should show warning dialog', async function() {
 
       // given
-      electronDialog.setResponse(0);
+      electronDialog.setResponse({ response: 0 });
 
       var options = {
         buttons: [{
@@ -102,14 +104,14 @@ describe('Dialog', function() {
       expect(dialogArgs.title).to.equal('warning');
       expect(dialogArgs.buttons).to.have.length(2);
 
-      expect(result).to.equal('foo');
+      expect(result.button).to.equal('foo');
     });
 
 
     it('should show info dialog', async function() {
 
       // given
-      electronDialog.setResponse(0);
+      electronDialog.setResponse({ response: 0 });
 
       var options = {
         buttons: [{
@@ -134,14 +136,14 @@ describe('Dialog', function() {
       expect(dialogArgs.title).to.equal('info');
       expect(dialogArgs.buttons).to.have.length(2);
 
-      expect(result).to.equal('foo');
+      expect(result.button).to.equal('foo');
     });
 
 
     it('should show question dialog', async function() {
 
       // given
-      electronDialog.setResponse(0);
+      electronDialog.setResponse({ response: 0 });
 
       var options = {
         buttons: [{
@@ -166,7 +168,39 @@ describe('Dialog', function() {
       expect(dialogArgs.title).to.equal('question');
       expect(dialogArgs.buttons).to.have.length(2);
 
-      expect(result).to.equal('foo');
+      expect(result.button).to.equal('foo');
+    });
+
+
+    it('should show dialog with checkbox', async function() {
+
+      // given
+      electronDialog.setResponse({
+        checkboxChecked: true,
+        response: 0
+      });
+
+      var options = {
+        buttons: [{
+          id: 'foo',
+          label: 'Foo'
+        }],
+        title: 'info',
+        type: 'info',
+        checkboxLabel: 'Bar'
+      };
+
+      // when
+      const result = await dialog.showDialog(options);
+
+      // then
+      var dialogArgs = getDialogArgs(electronDialog.showMessageBox);
+
+      expect(electronDialog.showMessageBox).to.have.been.called;
+
+      expect(dialogArgs.checkboxLabel).to.equal('Bar');
+
+      expect(result.checkboxChecked).to.equal(true);
     });
 
   });
@@ -188,7 +222,7 @@ describe('Dialog', function() {
       // given
       const filePaths = [ 'foo' ];
 
-      electronDialog.setResponse(filePaths);
+      electronDialog.setResponse({ filePaths });
 
       // when
       const response = await dialog.showOpenDialog(options);
@@ -205,7 +239,7 @@ describe('Dialog', function() {
     it('should NOT return filepaths', async function() {
 
       // given
-      electronDialog.setResponse(undefined);
+      electronDialog.setResponse(USER_CANCELED);
 
       // when
       const response = await dialog.showOpenDialog(options);
@@ -224,7 +258,7 @@ describe('Dialog', function() {
       it('should use userDesktopPath by default', async function() {
 
         // given
-        electronDialog.setResponse([]);
+        electronDialog.setResponse(USER_CANCELED);
 
         // when
         await dialog.showOpenDialog(options);
@@ -241,7 +275,7 @@ describe('Dialog', function() {
         // given
         const defaultPath = path.join(USER_PATH);
 
-        electronDialog.setResponse([]);
+        electronDialog.setResponse({ filePaths: [] });
 
         // when
         await dialog.showOpenDialog(assign({}, options, {
@@ -263,7 +297,7 @@ describe('Dialog', function() {
 
         const filePaths = [ fooPath ];
 
-        electronDialog.setResponse(filePaths);
+        electronDialog.setResponse({ filePaths });
 
         // when
         await dialog.showOpenDialog(options);
@@ -297,7 +331,7 @@ describe('Dialog', function() {
       // given
       const filePath = 'foo';
 
-      electronDialog.setResponse(filePath);
+      electronDialog.setResponse({ filePath });
 
       // when
       const response = await dialog.showSaveDialog(assign({}, options, { file }));
@@ -312,6 +346,9 @@ describe('Dialog', function() {
 
 
     it('should NOT return filepath', async function() {
+
+      // given
+      electronDialog.setResponse(USER_CANCELED);
 
       // when
       const response = await dialog.showSaveDialog(assign({}, options, { file }));
@@ -329,6 +366,9 @@ describe('Dialog', function() {
 
       it('should use userDesktopPath by default', async function() {
 
+        // given
+        electronDialog.setResponse(USER_CANCELED);
+
         // when
         await dialog.showSaveDialog(assign({}, options, { file }));
 
@@ -342,6 +382,8 @@ describe('Dialog', function() {
       it('should use specified defaultPath', async function() {
 
         // given
+        electronDialog.setResponse(USER_CANCELED);
+
         const defaultPath = path.join(USER_PATH);
 
         // when
@@ -363,7 +405,7 @@ describe('Dialog', function() {
         const fooPath = path.join(USER_PATH, 'foo', 'foo.file'),
               defaultPath = path.dirname(fooPath);
 
-        electronDialog.setResponse(fooPath);
+        electronDialog.setResponse({ filePath: fooPath });
 
         // when
         await dialog.showSaveDialog(assign({}, options, { file }));
@@ -388,7 +430,7 @@ describe('Dialog', function() {
         detail: 'bar'
       };
 
-      electronDialog.setResponse(0);
+      electronDialog.setResponse({ response: 0 });
 
       // when
       await dialog.showOpenFileErrorDialog(options);
@@ -411,7 +453,7 @@ describe('Dialog', function() {
         name: 'foo.txt'
       };
 
-      electronDialog.setResponse(0);
+      electronDialog.setResponse({ response: 0 });
 
       // when
       await dialog.showOpenFileErrorDialog(options);
@@ -433,5 +475,5 @@ describe('Dialog', function() {
 // helpers //////////
 
 function getDialogArgs(method) {
-  return method.args[0][1];
+  return method.args[ 0 ][ 1 ];
 }

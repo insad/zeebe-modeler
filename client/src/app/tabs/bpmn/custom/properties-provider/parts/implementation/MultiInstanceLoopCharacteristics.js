@@ -61,7 +61,7 @@ export default function(element, bpmnFactory, translate) {
   let entries = [];
 
   // input collection //////////////////////////////////////////////////////////////
-  entries.push(entryFactory.textField({
+  entries.push(entryFactory.textField(translate, {
     id: 'multiInstance-inputCollection',
     label: translate('Input Collection'),
     modelProperty: 'inputCollection',
@@ -74,7 +74,11 @@ export default function(element, bpmnFactory, translate) {
 
     },
 
-    set: setProperties,
+    set: function(element, values) {
+      return setProperties(element, {
+        inputCollection: values.inputCollection || undefined
+      });
+    },
 
     validate: function(element, values) {
       const loopCharacteristics = getLoopCharacteristics(element),
@@ -97,7 +101,7 @@ export default function(element, bpmnFactory, translate) {
   }));
 
   // input element //////////////////////////////////////////////////////////////////
-  entries.push(entryFactory.textField({
+  entries.push(entryFactory.textField(translate, {
     id: 'multiInstance-inputElement',
     label: translate('Input Element'),
     modelProperty: 'inputElement',
@@ -110,11 +114,15 @@ export default function(element, bpmnFactory, translate) {
 
     },
 
-    set: setProperties
+    set: function(element, values) {
+      return setProperties(element, {
+        inputElement: values.inputElement || undefined
+      });
+    }
   }));
 
   // output collection ////////////////////////////////////////////////////////////
-  entries.push(entryFactory.textField({
+  entries.push(entryFactory.textField(translate, {
     id: 'multiInstance-outputCollection',
     label: translate('Output Collection'),
     modelProperty: 'outputCollection',
@@ -127,11 +135,15 @@ export default function(element, bpmnFactory, translate) {
 
     },
 
-    set: setProperties
+    set: function(element, values) {
+      return setProperties(element, {
+        outputCollection: values.outputCollection || undefined
+      });
+    },
   }));
 
   // output element //////////////////////////////////////////////////////
-  entries.push(entryFactory.textField({
+  entries.push(entryFactory.textField(translate, {
     id: 'multiInstance-outputElement',
     label: translate('Output Element'),
     modelProperty: 'outputElement',
@@ -144,7 +156,11 @@ export default function(element, bpmnFactory, translate) {
 
     },
 
-    set: setProperties
+    set: function(element, values) {
+      return setProperties(element, {
+        outputElement: values.outputElement || undefined
+      });
+    },
   }));
 
   return entries;

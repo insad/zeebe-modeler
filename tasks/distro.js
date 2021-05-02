@@ -26,7 +26,7 @@ const {
 
 // in case of --nightly, update all package versions to the
 // next minor version with the nightly preid. This will
-// result in app and client being versioned like `v1.2.3-nightly.0`.
+// result in app and client being versioned like `v1.2.0-nightly.20191121`.
 
 const nightlyVersion = nightly && getVersion(pkg, {
   nightly: 'nightly'
@@ -92,6 +92,11 @@ const publishOptions = typeof publish !== undefined ? [
 const signingOptions = [
   `-c.forceCodeSigning=${false}`
 ];
+
+const certificateFingerprint = process.env.WIN_CSC_FINGERPRINT;
+if (certificateFingerprint) {
+  signingOptions.push(`-c.win.certificateSha1=${certificateFingerprint}`);
+}
 
 if (publish && (argv.ia32 || argv.x64)) {
   console.error('Do not override arch; is manually pinned');

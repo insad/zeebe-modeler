@@ -10,6 +10,14 @@
 
 import { filter } from 'min-dash';
 
+import {
+  Modal
+} from '../app/primitives';
+
+import { Fill } from '../app/slot-fill';
+
+import React, * as ReactExports from 'react';
+
 
 const PLUGINS_PROTOCOL = 'app-plugins://';
 
@@ -41,6 +49,15 @@ export default class Plugins {
    */
   bindHelpers(global) {
 
+    global.react = ReactExports;
+
+    global.react.React = React;
+
+    global.components = {
+      Fill,
+      Modal
+    };
+
     global.getModelerDirectory = () => {
       throw new Error('not implemented in Camunda Modeler >= 3.0.0');
     };
@@ -61,7 +78,7 @@ export default class Plugins {
   /**
    * Get plugins of type.
    *
-   * @param {String} type - Plugin type.
+   * @param {string} type - Plugin type.
    *
    * @returns {Array}
    */
@@ -75,7 +92,7 @@ export default class Plugins {
    * Load style plugin by creating HTML <link> tag.
    *
    * @param {Object} stylePlugin - Style plugin.
-   * @param {String} stylePlugin.style - Path to stylesheet.
+   * @param {string} stylePlugin.style - Path to stylesheet.
    */
   _loadStylePlugin(stylePlugin) {
     const { style } = stylePlugin;
@@ -92,10 +109,10 @@ export default class Plugins {
    * Load script plugin by creating HTML <script> tag.
    *
    * @param {Object} scriptPlugin - Script plugin.
-   * @param {String} scriptPlugin.script - Path to script.
+   * @param {string} scriptPlugin.script - Path to script.
    */
   _loadScriptPlugin(scriptPlugin) {
-    const { script } = scriptPlugin;
+    const { name, script } = scriptPlugin;
 
     return new Promise(resolve => {
       const scriptTag = document.createElement('script');
@@ -104,6 +121,7 @@ export default class Plugins {
       scriptTag.type = 'text/javascript';
       scriptTag.async = false;
       scriptTag.onload = resolve;
+      scriptTag.dataset.name = name;
 
       document.head.appendChild(scriptTag);
     });

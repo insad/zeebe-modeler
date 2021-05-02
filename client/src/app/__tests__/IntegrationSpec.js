@@ -15,10 +15,12 @@ import { App } from '../App';
 import {
   Backend,
   Cache,
+  Config,
   Dialog,
   FileSystem,
   Plugins,
-  Workspace
+  Workspace,
+  ZeebeAPI
 } from './mocks';
 
 import {
@@ -108,6 +110,19 @@ describe('Integration', function() {
 
 
   describe('modals', function() {
+    const modalRoot = document.createElement('div');
+    modalRoot.id = 'modal-root';
+
+
+    beforeEach(() => {
+      document.body.appendChild(modalRoot);
+    });
+
+
+    afterEach(() => {
+      document.body.removeChild(modalRoot);
+    });
+
 
     it('should show shortcuts modals', async function() {
 
@@ -137,10 +152,12 @@ function createApp(options = {}) {
 
   let globals = {
     backend: new Backend(),
+    config: new Config(),
     dialog: new Dialog(),
     fileSystem: new FileSystem(),
     plugins: new Plugins(),
-    workspace: new Workspace()
+    workspace: new Workspace(),
+    zeebeAPI: new ZeebeAPI()
   };
 
   if (options.globals) {

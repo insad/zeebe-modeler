@@ -191,6 +191,30 @@ describe('boundary-event-timer-event-properties', function() {
       container = propertiesPanel._container;
     }));
 
+    describe('availability', function() {
+
+      beforeEach(inject(function(elementRegistry, selection) {
+        const shape = elementRegistry.get('INTERRUPTED');
+        selection.select(shape);
+      }));
+
+
+      it('should have no <cycle> selection option', function() {
+
+        // given
+        const selectBox = getTimerDefinitionTypeField(container);
+
+        let option = find(selectBox.options, function(o) {
+          return o.value === 'cylce';
+        });
+
+        // then
+        expect(option).not.to.exist;
+      });
+
+    });
+
+
     describe('from undefined', function() {
 
       let timerDefinition;
@@ -357,6 +381,7 @@ describe('boundary-event-timer-event-properties', function() {
 
     });
 
+
     describe('from timeCycle', function() {
 
       let timerDefinition;
@@ -370,6 +395,7 @@ describe('boundary-event-timer-event-properties', function() {
         const bo = getBusinessObject(shape);
         timerDefinition = eventDefinitionHelper.getTimerEventDefinition(bo);
       }));
+
 
       describe('to undefined', function() {
 

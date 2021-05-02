@@ -12,12 +12,13 @@
 
 /**
  * js task for keep Zeebe Modeler in sync with original camunda modeler
+ * @type {import('simple-git').SimpleGit}
  */
 const git = require('simple-git')('');
 
 const exec = require('execa').sync;
 
-const parseMerge = require('simple-git/src/responses/MergeSummary').parse;
+const parseMerge = require('simple-git/src/lib/parsers/parse-merge').parseMergeResult;
 
 const mri = require('mri');
 
@@ -37,8 +38,7 @@ const {
   },
   default: {
     branch: CAMUNDA_MODELER_BRANCH,
-    help: false,
-    tag: false
+    help: false
   }
 });
 
@@ -74,21 +74,9 @@ async function createUpstream(options) {
 
   console.log(`Sync: Execute 'git remote add ${upstream} ${repository}'.`);
 
-  return new Promise((resolve, reject) => {
-    git.addRemote(
-      upstream,
-      repository,
-      (err, res) => {
+  await git.addRemote(upstream, repository);
 
-        if (err) {
-          reject(err);
-        }
-
-        console.log(`Sync: Created new upstream '${upstream}'.`);
-
-        resolve(res);
-      });
-  });
+  console.log(`Sync: Created new upstream '${upstream}'.`);
 }
 
 /**
@@ -102,23 +90,9 @@ async function hasUpstream(options) {
     upstream
   } = options;
 
-  return new Promise((resolve, reject) => {
-    git.getRemotes((err, remotes) => {
+  const remotes = await git.getRemotes();
 
-      if (err) {
-        reject(err);
-      }
-
-      remotes.forEach(r => {
-        if (r.name === upstream) {
-          resolve(true);
-        }
-      });
-
-      resolve(false);
-    });
-  });
-
+  return remotes.some(remote => remote.name === upstream);
 }
 
 /**
@@ -135,18 +109,9 @@ async function removeTags(options) {
     ...tags
   ];
 
-  return new Promise((resolve, reject) => {
-    git.tag(tagDeleteCmd, (err, res) => {
+  await git.tag(tagDeleteCmd);
 
-      if (err) {
-        reject(err);
-      }
-
-      console.log('Sync: Deleted all non-related tags.');
-
-      resolve();
-    });
-  });
+  console.log('Sync: Deleted all non-related tags.');
 }
 
 /**
@@ -155,20 +120,12 @@ async function removeTags(options) {
  * return {Array<String>}
  */
 async function listTags() {
-  return new Promise((resolve, reject) => {
-    git.tags({}, (err, res)=> {
+  const res = await git.tags({});
+  const {
+    all: tags
+  } = res;
 
-      if (err) {
-        reject(err);
-      }
-
-      const {
-        all: tags
-      } = res;
-
-      resolve(tags);
-    });
-  });
+  return tags;
 }
 
 /**
@@ -190,14 +147,9 @@ async function fetchUpstream(options) {
 
   console.log(`Sync: Execute 'git fetch ${upstream} ${CAMUNDA_MODELER_BRANCH} --tags' .`);
 
-  return new Promise((resolve, reject) => {
-    git.fetch(fetchCmd, (err, res) => {
+  await git.fetch(fetchCmd);
 
-      console.log(`Sync: Fetched actual state of upstream '${upstream}'.`);
-
-      resolve();
-    });
-  });
+  console.log(`Sync: Fetched actual state of upstream '${upstream}'.`);
 }
 
 
@@ -213,20 +165,11 @@ async function setCommitMessage(options) {
 
   console.log(`Sync: Execute 'git commit -m "${message}"'`);
 
-  return new Promise((resolve, reject) => {
-    git.raw([
-      'commit',
-      '-m',
-      message
-    ], (err, res) => {
-
-      if (err) {
-        reject(err);
-      }
-
-      resolve();
-    });
-  });
+  await git.raw([
+    'commit',
+    '-m',
+    message
+  ]);
 }
 
 /**
@@ -241,16 +184,7 @@ async function cleanUp(options) {
 
   console.log(`Sync: Execute 'git clean -${mode}'.`);
 
-  return new Promise((resolve, reject) => {
-    git.clean(mode, (err, res) => {
-
-      if (err) {
-        reject(err);
-      }
-
-      resolve();
-    });
-  });
+  await git.clean(mode);
 }
 
 /**
@@ -274,55 +208,44 @@ async function excludeFilesFromMerge(options) {
     '--'
   ];
 
-  resetCmd.push(... files);
+  resetCmd.push(...files);
 
-  return new Promise((resolve, reject) => {
+  await git.raw(resetCmd);
 
-    git.raw(resetCmd, async (err, res) => {
+  // cleanup working tree
+  await cleanUp({
+    mode: 'fd'
+  });
 
-      if (err) {
-        reject(err);
-        return;
-      }
+  const filteredConflicts = conflicts.filter(c => {
 
-      // cleanup working tree
-      await cleanUp({
-        mode: 'fd'
-      });
+    // filter out excluded conflicts
+    const includedPaths = (files || []).filter(f => {
+      return c.file && c.file.includes(f);
+    });
 
-      const filteredConflicts = conflicts.filter(c => {
+    // remove if in unrelated files or just 'modify/delete' error
+    return includedPaths.length === 0 && c.reason !== 'modify/delete';
+  });
 
-        // filter out excluded conflicts
-        const includedPaths = (files || []).filter(f => {
-          return c.file.includes(f);
-        });
-
-        // remove if in unrelated files or just 'modify/delete' error
-        return includedPaths.length === 0 && c.reason !== 'modify/delete';
-      });
-
-      console.log('Sync: Excluded non related files from merge conflicts. There could ' +
+  console.log('Sync: Excluded non related files from merge conflicts. There could ' +
       'be another untracked changes after synching. Give them a review and decide ' +
       'whether they are related!');
 
-      resolve({
-        conflicts: filteredConflicts
-      });
-
-    });
-  });
-
+  return {
+    conflicts: filteredConflicts
+  };
 }
 
 /**
- * $ git merge @upstream/@branch --no-commit --no-ff
+ * $ git merge @upstream/@branch --no-commit --squash
  * Overall syncing procedure
- * @param {String} options.branch
- * @param {String} options.tag
- * @param {String} options.upstream
+ * @param {object} options
+ * @param {string} options.branch
+ * @param {string} options.tag
+ * @param {string} options.upstream
  */
 async function sync(options) {
-
   const {
     branch,
     tag,
@@ -330,9 +253,9 @@ async function sync(options) {
   } = options;
 
   // no need do especially declare upstream if tag is selected
-  let syncPath = tag || `${upstream}/${branch}`;
+  const syncPath = tag ? tag : `${upstream}/${branch}`;
 
-  console.log(`Sync: Execute 'git merge --no-commit --no-ff ${syncPath}'.`);
+  console.log(`Sync: Execute 'git merge --no-commit --squash ${syncPath}'.`);
 
   const _success = async function(response) {
 
@@ -351,7 +274,7 @@ async function sync(options) {
   const mergeCmd = [
     'merge',
     '--no-commit',
-    '--no-ff',
+    '--squash',
     syncPath
   ];
 
@@ -379,7 +302,8 @@ async function sync(options) {
         'client/test/mocks/cmmn-js/',
         'client/test/mocks/dmn-js/',
         'client/src/app/tabs/bpmn/modeler/features/apply-default-templates/',
-        'client/src/app/tabs/bpmn/util/**/*namespace*'
+        'client/src/app/tabs/bpmn/util/**/*namespace*',
+        'client/src/plugins/',
       ]
     });
 
@@ -402,35 +326,36 @@ async function run(options) {
     tag
   } = options;
 
+  const upstream = CAMUNDA_MODELER_UPSTREAM;
+
   console.log('##### Started syncing #####');
 
-  const hasOrigin = await hasUpstream({
-    upstream: CAMUNDA_MODELER_UPSTREAM
-  });
+  await removeUpstream(upstream);
+  await pruneTags();
 
-  if (!hasOrigin) {
-    await createUpstream({
-      repository: CAMUNDA_MODELER_REPOSITORY,
-      upstream: CAMUNDA_MODELER_UPSTREAM
-    });
-  }
+  await createUpstream({
+    repository: CAMUNDA_MODELER_REPOSITORY,
+    upstream
+  });
 
   const originalTags = await listTags();
 
   await fetchUpstream({
-    upstream: CAMUNDA_MODELER_UPSTREAM
+    upstream
   });
 
   try {
     await sync({
       branch,
       tag,
-      upstream: CAMUNDA_MODELER_UPSTREAM
+      upstream
     });
   } catch (e) {
 
     // todo(pinussilvestrus): catch errors properly
   } finally {
+
+    await removeUpstream(upstream);
 
     const currentTags = await listTags(),
           newTags = currentTags.filter(t => {
@@ -441,4 +366,34 @@ async function run(options) {
 
     console.log('##### Stopped syncing #####');
   }
+}
+
+async function removeUpstream(upstream) {
+  const hasOrigin = await hasUpstream({
+    upstream
+  });
+
+  if (!hasOrigin) {
+    return;
+  }
+
+  console.log(`Sync: Execute 'git remote remove ${upstream}'.`);
+
+  await git.removeRemote(upstream);
+
+  console.log(`Sync: Removed upstream '${upstream}'.`);
+}
+
+async function pruneTags() {
+  const fetchCmd = [
+    'origin',
+    '--prune',
+    '--prune-tags'
+  ];
+
+  console.log('Sync: Execute \'git fetch origin --prune --prune-tags\'.');
+
+  await git.fetch(fetchCmd);
+
+  console.log('Sync: Pruned tags.');
 }

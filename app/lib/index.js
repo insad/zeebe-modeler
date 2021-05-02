@@ -11,37 +11,34 @@
 const {
   app,
   dialog: electronDialog,
+  screen: electronScreen,
   session,
   BrowserWindow
 } = require('electron');
 
 const path = require('path');
 
-const fetch = require('node-fetch');
-const fs = require('fs');
-const FormData = require('form-data');
+const ZB = require('zeebe-node');
 
-/**
- * automatically report crash reports
- *
- * @see http://electron.atom.io/docs/v0.34.0/api/crash-reporter/
- */
-// TODO(nikku): do we want to do this?
-// require('crash-reporter').start();
 
-const Platform = require('./platform');
-const Config = require('./config');
-const ClientConfig = require('./client-config');
-const FileSystem = require('./file-system');
-const Workspace = require('./workspace');
-const Dialog = require('./dialog');
-const Menu = require('./menu');
 const Cli = require('./cli');
-const Plugins = require('./plugins');
-const Deployer = require('./deployer');
+const Config = require('./config');
+const Dialog = require('./dialog');
 const Flags = require('./flags');
 const Log = require('./log');
 const logTransports = require('./log/transports');
+const Menu = require('./menu');
+const Platform = require('./platform');
+const Plugins = require('./plugins');
+const WindowManager = require('./window-manager');
+const Workspace = require('./workspace');
+const ZeebeAPI = require('./zeebe-api');
+
+const {
+  readFile,
+  readFileStats,
+  writeFile
+} = require('./file-system');
 
 const browserOpen = require('./util/browser-open');
 const renderer = require('./util/renderer');
@@ -52,60 +49,36 @@ const clientLog = Log('client');
 
 bootstrapLogging();
 
-app.version = require('../package').version;
-app.name = 'Zeebe Modeler';
+const name = app.name = 'Zeebe Modeler';
+const version = app.version = require('../package').version;
 
-bootstrapLog.info('starting %s v%s', app.name, app.version);
-
-const {
-  config,
-  clientConfig,
-  plugins,
-  flags,
-  files
-} = bootstrap();
+bootstrapLog.info(`starting ${ name } v${ version }`);
 
 const {
   platform
 } = process;
 
-app.plugins = plugins;
-app.flags = flags;
+const {
+  config,
+  dialog,
+  files,
+  flags,
+  menu,
+  plugins,
+  windowManager,
+  zeebeAPI
+} = bootstrap();
 
+app.flags = flags;
 app.metadata = {
-  version: app.version,
-  name: app.name
+  version,
+  name
 };
+app.plugins = plugins;
 
 Platform.create(platform, app, config);
 
-
-const menu = new Menu({
-  platform
-});
-
-// bootstrap filesystem
-const fileSystem = new FileSystem();
-
-// bootstrap workspace behavior
-new Workspace(config, fileSystem);
-
-// bootstrap dialog
-const dialog = new Dialog({
-  electronDialog,
-  config: config,
-  userDesktopPath: app.getPath('userDesktop')
-});
-
-
-// bootstrap deployer
-const deployer = new Deployer({ fetch, fs, FormData });
-
-
-// make app a singleton
-//
-// may be disabled via --no-single-instance flag
-//
+// only allow single instance if not disabled via `--no-single-instance` flag
 if (flags.get('single-instance') === false) {
   log.info('single instance disabled via flag');
 } else {
@@ -184,21 +157,16 @@ renderer.on('dialog:save-file', async function(options, done) {
 });
 
 renderer.on('dialog:show', async function(options, done) {
-  const response = await dialog.showDialog(options, done);
+  const response = await dialog.showDialog(options);
 
   done(null, response);
 });
-
-// deploying //////////
-// TODO: remove and add as plugin instead
-
-renderer.on('deploy', handleDeployment);
 
 // filesystem //////////
 
 renderer.on('file:read', function(filePath, options = {}, done) {
   try {
-    const newFile = fileSystem.readFile(filePath, options);
+    const newFile = readFile(filePath, options);
 
     done(null, newFile);
   } catch (err) {
@@ -207,14 +175,14 @@ renderer.on('file:read', function(filePath, options = {}, done) {
 });
 
 renderer.on('file:read-stats', function(file, done) {
-  const newFile = fileSystem.readFileStats(file);
+  const newFile = readFileStats(file);
 
   done(null, newFile);
 });
 
-renderer.on('file:write', async function(filePath, file, options = {}, done) {
+renderer.on('file:write', function(filePath, file, options = {}, done) {
   try {
-    const newFile = fileSystem.writeFile(filePath, file, options);
+    const newFile = writeFile(filePath, file, options);
 
     done(null, newFile);
   } catch (err) {
@@ -222,18 +190,63 @@ renderer.on('file:write', async function(filePath, file, options = {}, done) {
   }
 });
 
-// client config //////////
+// zeebe api //////////
 
-renderer.on('client-config:get', function(...args) {
+renderer.on('zeebe:checkConnectivity', async function(parameters, done) {
+  try {
+    const connectivity = await zeebeAPI.checkConnectivity(parameters);
 
-  const done = args[args.length - 1];
+    done(null, connectivity);
+  } catch (err) {
+    done(err);
+  }
+});
+
+renderer.on('zeebe:deploy', async function(parameters, done) {
+  try {
+    const deploymentResult = await zeebeAPI.deploy(parameters);
+
+    done(null, deploymentResult);
+  } catch (err) {
+    done(err);
+  }
+});
+
+renderer.on('zeebe:run', async function(parameters, done) {
+  try {
+    const runResult = await zeebeAPI.run(parameters);
+
+    done(null, runResult);
+  } catch (err) {
+    done(err);
+  }
+});
+
+// config //////////
+
+renderer.on('config:get', function(key, ...args) {
+  const done = args.pop();
+
+  let value;
 
   try {
-    clientConfig.get(...args);
-  } catch (e) {
-    if (typeof done === 'function') {
-      done(e);
-    }
+    value = config.get(key, ...args);
+
+    done(null, value);
+  } catch (error) {
+    done(error);
+  }
+});
+
+renderer.on('config:set', function(key, value, ...args) {
+  const done = args.pop();
+
+  try {
+    value = config.set(key, value, ...args);
+
+    done(null, value);
+  } catch (error) {
+    done(error);
   }
 });
 
@@ -301,11 +314,11 @@ app.on('web-contents-created', (event, webContents) => {
 /**
  * Open the given filePaths in the editor.
  *
- * @param {Array<String>} filePaths
+ * @param {Array<string>} filePaths
  */
 app.openFiles = function(filePaths) {
 
-  log.info('open files %O', filePaths);
+  log.info('open files', filePaths);
 
   if (!app.clientReady) {
 
@@ -316,7 +329,7 @@ app.openFiles = function(filePaths) {
   const existingFiles = filePaths.map(filePath => {
 
     try {
-      return fileSystem.readFile(filePath);
+      return readFile(filePath);
     } catch (e) {
       dialog.showOpenFileErrorDialog({
         name: path.basename(filePath)
@@ -335,13 +348,19 @@ app.openFiles = function(filePaths) {
  */
 app.createEditorWindow = function() {
 
+  const nodeIntegration = !!flags.get('dangerously-enable-node-integration');
+
+  if (nodeIntegration) {
+    log.warn('nodeIntegration is enabled via --dangerously-enable-node-integration');
+  }
+
   const windowOptions = {
     resizable: true,
     show: false,
     title: 'Zeebe Modeler',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false
+      nodeIntegration
     }
   };
 
@@ -351,9 +370,9 @@ app.createEditorWindow = function() {
 
   const mainWindow = app.mainWindow = new BrowserWindow(windowOptions);
 
-  dialog.setActiveWindow(mainWindow);
+  windowManager.manage(mainWindow);
 
-  menu.init();
+  dialog.setActiveWindow(mainWindow);
 
   let url = 'file://' + path.resolve(__dirname + '/../public/index.html');
 
@@ -398,10 +417,6 @@ app.createEditorWindow = function() {
     mainWindow.show();
   });
 
-  mainWindow.webContents.on('dom-ready', function() {
-    mainWindow.maximize();
-  });
-
   app.emit('app:window-created', mainWindow);
 
   // only set by client, when it is ok to exit
@@ -412,7 +427,7 @@ app.on('restart', function(args) {
 
   const effectiveArgs = Cli.appendArgs(process.argv.slice(1), [ ...args, '--relaunch' ]);
 
-  log.info('restarting with args %O', effectiveArgs);
+  log.info('restarting with args', effectiveArgs);
 
   app.relaunch({
     args: effectiveArgs
@@ -468,21 +483,6 @@ app.on('ready', function() {
 });
 
 
-function handleDeployment(data, done) {
-  const { endpointUrl } = data;
-
-  deployer.deploy(endpointUrl, data, function(error, result) {
-
-    if (error) {
-      log.error('failed to deploy', error);
-
-      return done(error);
-    }
-
-    done(null, result);
-  });
-}
-
 function bootstrapLogging() {
 
   let logPath;
@@ -505,77 +505,107 @@ function bootstrapLogging() {
 }
 
 /**
- * Bootstrap the application and return
+ * Bootstrap and return application components.
  *
- * {
- *   config,
- *   clientConfig,
- *   plugins,
- *   files
- * }
- *
- * @return {Object} bootstrapped components
+ * @return {Object}
  */
 function bootstrap() {
-  const userPath = app.getPath('userData');
-  const appPath = path.dirname(app.getPath('exe'));
-
-  const cwd = process.cwd();
+  const appPath = path.dirname(app.getPath('exe')),
+        cwd = process.cwd(),
+        userDesktopPath = app.getPath('userDesktop');
 
   const {
     files,
     flags: flagOverrides
   } = Cli.parse(process.argv, cwd);
 
-  const additionalPaths = process.env.NODE_ENV === 'development'
-    ? [ path.join(cwd, 'resources') ]
-    : [ ];
+  // (1) user path
+  if (flagOverrides['user-data-dir']) {
+    app.setPath('userData', flagOverrides['user-data-dir']);
+  }
 
-  const resourcePaths = [
-    path.join(userPath, 'resources'),
+  const userPath = app.getPath('userData');
+
+  let resourcesPaths = [
     path.join(appPath, 'resources'),
-    ...additionalPaths
+    path.join(userPath, 'resources')
   ];
 
+  if (process.env.NODE_ENV === 'development') {
+    resourcesPaths = [
+      ...resourcesPaths,
+      path.join(cwd, 'resources')
+    ];
+  }
+
+  // (2) config
   const config = new Config({
-    path: userPath
+    appPath,
+    resourcesPaths,
+    userPath
   });
 
-  const clientConfig = new ClientConfig({
-    paths: resourcePaths
-  });
-
+  // (3) flags
   const flags = new Flags({
-    paths: resourcePaths,
+    paths: resourcesPaths,
     overrides: flagOverrides
   });
 
+  // (4) menu
+  const menu = new Menu({
+    platform
+  });
+
+  // (5) dialog
+  const dialog = new Dialog({
+    config,
+    electronDialog,
+    userDesktopPath
+  });
+
+  // (6) workspace
+  new Workspace(config);
+
+  // (7) plugins
   const pluginsDisabled = flags.get('disable-plugins');
 
+  // (8) window manager
+  const windowManager = new WindowManager({
+    config,
+    electronScreen
+  });
+
+  let paths;
+
   if (pluginsDisabled) {
+    paths = [];
+
     log.info('plug-ins disabled via feature toggle');
+  } else {
+    paths = [
+      appPath,
+      ...resourcesPaths,
+      userPath
+    ];
   }
 
-  // TODO(nikku): remove loading directly from {ROOT}/resources/plugins
-  // we changed it to load plug-ins from {ROOT}/resources/plugins via
-  // https://github.com/camunda/camunda-modeler/issues/597
   const plugins = new Plugins({
-    paths: pluginsDisabled ? [] : [
-      ...resourcePaths,
-      userPath,
-      appPath
-    ]
+    paths
   });
+
+  const zeebeAPI = new ZeebeAPI({ readFile }, ZB);
 
   return {
     config,
-    clientConfig,
-    plugins,
+    dialog,
+    files,
     flags,
-    files
+    menu,
+    plugins,
+    windowManager,
+    zeebeAPI
   };
 }
-
 
 // expose app
 module.exports = app;
